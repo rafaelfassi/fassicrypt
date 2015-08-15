@@ -1,57 +1,45 @@
 #include "mainwindow.h"
 #include "simplecrypt.h"
 
+#include <QGuiApplication>
 #include <QCryptographicHash>
-#include <QApplication>
-#include <QPlainTextEdit>
-#include <QPushButton>
-#include <QVBoxLayout>
-#include <QMessageBox>
 #include <QTextStream>
-#include <QInputDialog>
 #include <QDir>
 #include <QFile>
 #include <QDebug>
-#include <QAction>
 
-MainWindow::MainWindow(QWidget *parent)
-    : QWidget(parent)
+MainWindow::MainWindow(QObject *parent)
+    : QObject(parent)
 {
-    bool ok;
-    QString strKey = QInputDialog::getText(this, tr("Senha"),
-                                         tr("Entre com a senha:"), QLineEdit::Password,
-                                         "", &ok);
-    if (ok && !strKey.isEmpty())
+}
+
+MainWindow::~MainWindow()
+{
+}
+
+bool MainWindow::login(const QString &pwd)
+{
+    bool ok(false);
+
+    if (!pwd.isEmpty())
     {
         QCryptographicHash hash(QCryptographicHash::Md5);
-        hash.addData(strKey.toLatin1());
+        hash.addData(pwd.toLatin1());
 
         QByteArray result = hash.result().toHex().mid(0, 16);
 
-        bool ok;
         m_key = result.toULongLong(&ok, 16);
-        if(!ok) m_key = 0;
+        if(!ok)
+            m_key = 0;
+        else
+            ok &= openFile();
     }
     else
     {
         m_key = 0;
     }
 
-    m_textEdit = new QPlainTextEdit();
-    m_btnSalvar = new QPushButton(tr("Salvar"));
-
-    QVBoxLayout *layout = new QVBoxLayout;
-    layout->addWidget(m_textEdit);
-    layout->addWidget(m_btnSalvar);
-    setLayout(layout);
-
-    connect(m_btnSalvar, SIGNAL(clicked()), this, SLOT(saveFile()));
-
-    openFile();
-}
-
-MainWindow::~MainWindow()
-{
+    return ok;
 }
 
 QString MainWindow::getFileName()
@@ -72,15 +60,19 @@ QString MainWindow::getFileName()
     return dataPath + "/datafile.bin";
 }
 
-void MainWindow::openFile()
+bool MainWindow::openFile()
 {
-    if(!m_key) return;
+    if(!m_key)
+    {
+        m_textError = tr("Senha não definida!");
+        return false;
+    }
 
     QFile file(getFileName());
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
     {
-        QMessageBox::information(this, tr("Atenção"), tr("Um novo arquivo será criado"));
-        return;
+        m_textWarning = tr("Um novo arquivo será criado");
+        return true;
     }
 
     SimpleCrypt crypto(m_key);
@@ -100,33 +92,38 @@ void MainWindow::openFile()
 
     if(!validKey)
     {
-        QMessageBox::critical(this, tr("Erro"), tr("Senha inválida!"));
+        m_textError = tr("Senha inválida!");
         m_key = 0;
     }
 
     textDecript.remove(textDecript.length()-16, 16);
 
-    m_textEdit->setPlainText(textDecript);
+    m_textDecript = textDecript;
+    emit textDecriptChanged();
     file.close();
+
+    return validKey;
 }
 
-void MainWindow::saveFile()
+bool MainWindow::saveFile()
 {
     if(!m_key)
     {
-        QMessageBox::critical(this, tr("Erro"), tr("Senha inválida!"));
-        return;
+        m_textError = tr("Senha não definida!");
+        return false;
     }
 
     QFile file(getFileName());
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
     {
-        QMessageBox::critical(this, tr("Erro"), tr("Não é possível criar ou salvar o arquivo"));
-        return;
+        m_textError = tr("Não é possível criar ou salvar o arquivo");
+        return false;
     }
 
     SimpleCrypt crypto(m_key);
     QTextStream out(&file);
-    out << crypto.encryptToString(m_textEdit->toPlainText() + QString::number(m_key, 16));
+    out << crypto.encryptToString(m_textDecript + QString::number(m_key, 16));
     file.close();
+
+    return true;
 }

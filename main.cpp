@@ -1,6 +1,8 @@
 #include "mainwindow.h"
-#include <QApplication>
 #include <QKeyEvent>
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QQmlContext>
 
 class CEventMonitor : public QObject
 {
@@ -25,13 +27,17 @@ class CEventMonitor : public QObject
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
+    QGuiApplication app(argc, argv);
+    QQmlApplicationEngine engine;
 
     CEventMonitor monitor;
-    a.installEventFilter(&monitor);
+    app.installEventFilter(&monitor);
 
-    MainWindow w;
-    w.show();
+    MainWindow window;
 
-    return a.exec();
+    engine.rootContext()->setContextProperty("mainWindow", &window);
+    engine.load(QUrl("qrc:/qml/MainWindow.qml"));
+
+
+    return app.exec();
 }
